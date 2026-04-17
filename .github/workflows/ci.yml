@@ -31,4 +31,4 @@ jobs:
       - name: brew style
         run: |
           tap_path="$(brew --repository)/Library/Taps/${{ github.repository }}"
-          brew style --cask "$tap_path/Casks/"
+          find "$tap_path/Casks" -name '*.rb' -print0 | xargs -0 brew style --cask
