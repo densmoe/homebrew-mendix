@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up tap
+        run: |
+          tap_path="$(brew --repository)/Library/Taps/${{ github.repository }}"
+          mkdir -p "$(dirname "$tap_path")"
+          ln -s "$GITHUB_WORKSPACE" "$tap_path"
+
+      - name: brew readall
+        run: brew readall --os=all --arch=all densmoe/mendix
+
+      - name: brew audit
+        run: |
+          for cask in Casks/*.rb; do
+            name="$(basename "$cask" .rb)"
+            echo "Auditing $name..."
+            brew audit --cask --strict "densmoe/mendix/$name"
+          done
+
+      - name: brew style
+        run: brew style --cask Casks/
