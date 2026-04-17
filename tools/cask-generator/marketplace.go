@@ -252,8 +252,10 @@ func parseFramework(obj frameworkObject) *Release {
 
 	isStable := versionType == "Stable" || versionType == "MTS" || versionType == "LTS"
 
+	shortVersion := fmt.Sprintf("%d.%d.%d", parts[0], parts[1], parts[2])
+
 	r := &Release{
-		Version:     version,
+		Version:     shortVersion,
 		VersionFull: versionFull,
 		VersionType: versionType,
 		IsStable:    isStable,

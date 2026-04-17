@@ -17,7 +17,7 @@ import (
 )
 
 const caskTemplate = `cask "{{.Token}}" do
-  version "{{.Version}}"
+  version "{{.DownloadVersion}}"
   sha256 "{{.SHA256}}"
 
   url "https://artifacts.rnd.mendix.com/modelers/Mendix-#{version}-Mac-Setup.pkg"
@@ -32,10 +32,10 @@ end
 `
 
 type CaskData struct {
-	Token   string
-	Version string
-	SHA256  string
-	AppName string
+	Token           string
+	DownloadVersion string
+	SHA256          string
+	AppName         string
 }
 
 type caskJob struct {
@@ -107,7 +107,7 @@ func main() {
 		}
 
 		dv := downloadVersion(r)
-		token := "mendix-studio-pro@" + dv
+		token := "mendix-studio-pro@" + r.Version
 
 		if existing[token] {
 			continue
@@ -201,13 +201,13 @@ func main() {
 		}
 
 		data := CaskData{
-			Token:   r.job.token,
-			Version: r.job.downloadVersion,
-			SHA256:  r.sha,
-			AppName: r.job.appName,
+			Token:           r.job.token,
+			DownloadVersion: r.job.downloadVersion,
+			SHA256:          r.sha,
+			AppName:         r.job.appName,
 		}
 
-		caskPath := filepath.Join(caskDir, r.job.token+".rb")
+		caskPath := filepath.Join(caskDir, r.job.token + ".rb")
 		f, err := os.Create(caskPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  ERROR writing %s: %v\n", caskPath, err)
