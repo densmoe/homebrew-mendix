@@ -1,0 +1,82 @@
+name: Update Casks
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/cask-generator/go.mod
+
+      - name: Build cask generator
+        working-directory: tools/cask-generator
+        run: go build -o cask-generator .
+
+      - name: Generate new casks
+        run: tools/cask-generator/cask-generator -cask-dir Casks
+
+      - name: Set up tap
+        run: |
+          tap_path="$(brew --repository)/Library/Taps/${{ github.repository }}"
+          mkdir -p "$(dirname "$tap_path")"
+          ln -s "$GITHUB_WORKSPACE" "$tap_path"
+
+      - name: Lint new casks
+        run: |
+          for cask in Casks/*.rb; do
+            name="$(basename "$cask" .rb)"
+            brew audit --cask --strict "densmoe/mendix/$name"
+          done
+          brew style --cask Casks/
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if [ -n "$(git diff --name-only)" ] || [ -n "$(git ls-files --others --exclude-standard Casks/)" ]; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create pull request
+        if: steps.changes.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          branch="auto/update-casks-$(date +%Y%m%d)"
+          git checkout -b "$branch"
+          git add Casks/
+
+          new_casks=$(git diff --cached --name-only | sed 's|Casks/||;s|\.rb||' | sort)
+          count=$(echo "$new_casks" | wc -l | tr -d ' ')
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Add ${count} new cask(s)
+
+          $(echo "$new_casks" | sed 's/^/- /')"
+
+          git push -u origin "$branch"
+
+          gh pr create \
+            --title "Add ${count} new Mendix Studio Pro cask(s)" \
+            --body "$(cat <<EOF
+          ## New casks
+
+          $(echo "$new_casks" | sed 's/^/- `/' | sed 's/$/`/')
+
+          Generated automatically by the daily cask update workflow.
+          All casks passed \`brew audit --strict\` and \`brew style\`.
+          EOF
+          )"
