@@ -207,23 +207,160 @@ func main() {
 			AppName:         r.job.appName,
 		}
 
-		caskPath := filepath.Join(caskDir, r.job.token + ".rb")
-		f, err := os.Create(caskPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "  ERROR writing %s: %v\n", caskPath, err)
+		if err := writeCask(tmpl, caskDir, data); err != nil {
+			fmt.Fprintf(os.Stderr, "  ERROR: %v\n", err)
 			continue
 		}
-
-		if err := tmpl.Execute(f, data); err != nil {
-			f.Close()
-			fmt.Fprintf(os.Stderr, "  ERROR generating %s: %v\n", caskPath, err)
-			continue
-		}
-		f.Close()
 		generated++
 	}
 
 	fmt.Printf("\nGenerated %d new cask(s).\n", generated)
+
+	fmt.Println("\nUpdating alias casks...")
+	aliasCount := generateAliases(tmpl, caskDir)
+	fmt.Printf("Updated %d alias cask(s).\n", aliasCount)
+}
+
+func writeCask(tmpl *template.Template, caskDir string, data CaskData) error {
+	caskPath := filepath.Join(caskDir, data.Token+".rb")
+	f, err := os.Create(caskPath)
+	if err != nil {
+		return fmt.Errorf("writing %s: %w", caskPath, err)
+	}
+	defer f.Close()
+
+	if err := tmpl.Execute(f, data); err != nil {
+		return fmt.Errorf("generating %s: %w", caskPath, err)
+	}
+	return nil
+}
+
+func generateAliases(tmpl *template.Template, caskDir string) int {
+	type caskInfo struct {
+		version         [4]int // major, minor, patch, build
+		downloadVersion string
+		sha256          string
+		appName         string
+	}
+
+	entries, err := os.ReadDir(caskDir)
+	if err != nil {
+		return 0
+	}
+
+	var casks []caskInfo
+	for _, e := range entries {
+		name := strings.TrimSuffix(e.Name(), ".rb")
+		if name == e.Name() || !strings.HasPrefix(name, "mendix-studio-pro@") {
+			continue
+		}
+		ver := strings.TrimPrefix(name, "mendix-studio-pro@")
+		// Skip existing aliases
+		parts := parseVersionParts(ver)
+		if len(parts) < 3 {
+			continue
+		}
+
+		dv, sha, app := readCaskFields(filepath.Join(caskDir, e.Name()))
+		if sha == "" {
+			continue
+		}
+
+		var v [4]int
+		for i := 0; i < len(parts) && i < 4; i++ {
+			v[i] = parts[i]
+		}
+		casks = append(casks, caskInfo{version: v, downloadVersion: dv, sha256: sha, appName: app})
+	}
+
+	// Find latest for each alias: "latest", "N", "N.M"
+	type alias struct {
+		token string
+		best  caskInfo
+	}
+
+	aliases := map[string]*alias{}
+
+	// "latest" alias
+	aliases["latest"] = &alias{token: "mendix-studio-pro@latest"}
+
+	for _, c := range casks {
+		// Update "latest"
+		a := aliases["latest"]
+		if versionGreater(c.version, a.best.version) {
+			a.best = c
+		}
+
+		// "N" alias (e.g., "10", "11")
+		majorKey := fmt.Sprintf("%d", c.version[0])
+		majorToken := "mendix-studio-pro@" + majorKey
+		if _, ok := aliases[majorKey]; !ok {
+			aliases[majorKey] = &alias{token: majorToken}
+		}
+		if versionGreater(c.version, aliases[majorKey].best.version) {
+			aliases[majorKey].best = c
+		}
+
+		// "N.M" alias (e.g., "10.24", "11.9")
+		minorKey := fmt.Sprintf("%d.%d", c.version[0], c.version[1])
+		minorToken := "mendix-studio-pro@" + minorKey
+		if _, ok := aliases[minorKey]; !ok {
+			aliases[minorKey] = &alias{token: minorToken}
+		}
+		if versionGreater(c.version, aliases[minorKey].best.version) {
+			aliases[minorKey].best = c
+		}
+	}
+
+	count := 0
+	for _, a := range aliases {
+		if a.best.sha256 == "" {
+			continue
+		}
+		data := CaskData{
+			Token:           a.token,
+			DownloadVersion: a.best.downloadVersion,
+			SHA256:          a.best.sha256,
+			AppName:         a.best.appName,
+		}
+		if err := writeCask(tmpl, caskDir, data); err != nil {
+			fmt.Fprintf(os.Stderr, "  ERROR alias %s: %v\n", a.token, err)
+			continue
+		}
+		fmt.Printf("  %s -> %s\n", a.token, a.best.downloadVersion)
+		count++
+	}
+	return count
+}
+
+func versionGreater(a, b [4]int) bool {
+	for i := 0; i < 4; i++ {
+		if a[i] != b[i] {
+			return a[i] > b[i]
+		}
+	}
+	return false
+}
+
+func readCaskFields(path string) (downloadVersion, sha256, appName string) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", "", ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "version ") {
+			downloadVersion = strings.Trim(strings.TrimPrefix(line, "version "), `"`)
+		} else if strings.HasPrefix(line, "sha256 ") {
+			sha256 = strings.Trim(strings.TrimPrefix(line, "sha256 "), `"`)
+		} else if strings.HasPrefix(line, "uninstall delete:") {
+			// extract app name from: uninstall delete: "/Applications/Foo.app"
+			if i := strings.Index(line, "/Applications/"); i != -1 {
+				appName = strings.Trim(line[i+len("/Applications/"):], `"`)
+			}
+		}
+	}
+	return
 }
 
 func downloadVersion(r Release) string {
