@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   update:
@@ -41,23 +40,13 @@ jobs:
           tap_path="$(brew --repository)/Library/Taps/${{ github.repository }}"
           find "$tap_path/Casks" -name '*.rb' -print0 | xargs -0 brew style --cask
 
-      - name: Check for changes
-        id: changes
+      - name: Commit and push
         run: |
-          if [ -n "$(git diff --name-only)" ] || [ -n "$(git ls-files --others --exclude-standard Casks/)" ]; then
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create pull request
-        if: steps.changes.outputs.has_changes == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          branch="auto/update-casks-$(date +%Y%m%d)"
-          git checkout -b "$branch"
           git add Casks/
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
 
           new_casks=$(git diff --cached --name-only | sed 's|Casks/||;s|\.rb||' | sort)
           count=$(echo "$new_casks" | wc -l | tr -d ' ')
@@ -68,16 +57,4 @@ jobs:
 
           $(echo "$new_casks" | sed 's/^/- /')"
 
-          git push -u origin "$branch"
-
-          gh pr create \
-            --title "Add ${count} new Mendix Studio Pro cask(s)" \
-            --body "$(cat <<EOF
-          ## New casks
-
-          $(echo "$new_casks" | sed 's/^/- `/' | sed 's/$/`/')
-
-          Generated automatically by the daily cask update workflow.
-          All casks passed \`brew audit --strict\` and \`brew style\`.
-          EOF
-          )"
+          git push origin main
