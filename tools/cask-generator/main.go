@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"text/template"
 	"time"
 )
@@ -36,6 +38,14 @@ type CaskData struct {
 	AppName string
 }
 
+type caskJob struct {
+	release         Release
+	downloadVersion string
+	token           string
+	appName         string
+	macURL          string
+}
+
 func main() {
 	var (
 		caskDir      string
@@ -43,6 +53,7 @@ func main() {
 		dryRun       bool
 		versionTypes string
 		minMajor     int
+		workers      int
 	)
 
 	flag.StringVar(&caskDir, "cask-dir", "", "path to Casks/ directory (default: auto-detect from repo root)")
@@ -50,6 +61,7 @@ func main() {
 	flag.BoolVar(&dryRun, "dry-run", false, "print what would be generated without writing files")
 	flag.StringVar(&versionTypes, "version-types", "LTS,MTS,Stable", "comma-separated version types to include")
 	flag.IntVar(&minMajor, "min-major", 10, "minimum major version to generate casks for")
+	flag.IntVar(&workers, "workers", 5, "number of parallel downloads for SHA256 computation")
 	flag.Parse()
 
 	if caskDir == "" {
@@ -68,7 +80,7 @@ func main() {
 		types[i] = strings.TrimSpace(types[i])
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Hour)
 	defer cancel()
 
 	fmt.Println("Fetching versions from Mendix Marketplace...")
@@ -88,59 +100,114 @@ func main() {
 	existing := existingCasks(caskDir)
 	fmt.Printf("Found %d existing casks in %s\n", len(existing), caskDir)
 
+	var jobs []caskJob
+	for _, r := range releases {
+		if r.Major < minMajor {
+			continue
+		}
+
+		dv := downloadVersion(r)
+		token := "mendix-studio-pro@" + dv
+
+		if existing[token] {
+			continue
+		}
+
+		macURL := fmt.Sprintf("https://artifacts.rnd.mendix.com/modelers/Mendix-%s-Mac-Setup.pkg", dv)
+
+		if !urlExists(macURL) {
+			fmt.Printf("  SKIP %s (installer not found at CDN)\n", dv)
+			continue
+		}
+
+		jobs = append(jobs, caskJob{
+			release:         r,
+			downloadVersion: dv,
+			token:           token,
+			appName:         appName(r),
+			macURL:          macURL,
+		})
+	}
+
+	if len(jobs) == 0 {
+		fmt.Println("All casks are up to date.")
+		return
+	}
+
+	if dryRun {
+		for _, j := range jobs {
+			fmt.Printf("  Would generate %s.rb\n", j.token)
+		}
+		fmt.Printf("\nDry run: %d cask(s) would be generated.\n", len(jobs))
+		return
+	}
+
 	tmpl, err := template.New("cask").Parse(caskTemplate)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error parsing template: %v\n", err)
 		os.Exit(1)
 	}
 
-	var generated int
-	for _, r := range releases {
-		if r.Major < minMajor {
-			continue
-		}
+	fmt.Printf("Generating %d cask(s) with %d parallel workers...\n", len(jobs), workers)
 
-		downloadVersion := downloadVersion(r)
-		token := "mendix-studio-pro@" + downloadVersion
+	type result struct {
+		job  caskJob
+		sha  string
+		err  error
+	}
 
-		if existing[token] {
-			continue
-		}
+	jobCh := make(chan caskJob, len(jobs))
+	resultCh := make(chan result, len(jobs))
 
-		appName := appName(r)
-		macURL := fmt.Sprintf("https://artifacts.rnd.mendix.com/modelers/Mendix-%s-Mac-Setup.pkg", downloadVersion)
+	var wg sync.WaitGroup
+	var completed atomic.Int32
+	total := len(jobs)
 
-		if !urlExists(macURL) {
-			fmt.Printf("  SKIP %s (installer not found at CDN)\n", downloadVersion)
-			continue
-		}
-
-		sha := "REPLACE_WITH_SHA256"
-		if !skipSHA {
-			fmt.Printf("  Downloading %s for SHA256...\n", downloadVersion)
-			var err error
-			sha, err = computeSHA256(macURL)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "  ERROR computing SHA256 for %s: %v\n", downloadVersion, err)
-				continue
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range jobCh {
+				sha := "REPLACE_WITH_SHA256"
+				var dlErr error
+				if !skipSHA {
+					sha, dlErr = computeSHA256(j.macURL)
+				}
+				n := completed.Add(1)
+				if dlErr != nil {
+					fmt.Printf("  [%d/%d] ERROR %s: %v\n", n, total, j.downloadVersion, dlErr)
+				} else {
+					fmt.Printf("  [%d/%d] %s SHA256: %s\n", n, total, j.downloadVersion, sha)
+				}
+				resultCh <- result{job: j, sha: sha, err: dlErr}
 			}
-			fmt.Printf("  SHA256: %s\n", sha)
+		}()
+	}
+
+	for _, j := range jobs {
+		jobCh <- j
+	}
+	close(jobCh)
+
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	var generated int
+	for r := range resultCh {
+		if r.err != nil {
+			continue
 		}
 
 		data := CaskData{
-			Token:   token,
-			Version: downloadVersion,
-			SHA256:  sha,
-			AppName: appName,
+			Token:   r.job.token,
+			Version: r.job.downloadVersion,
+			SHA256:  r.sha,
+			AppName: r.job.appName,
 		}
 
-		if dryRun {
-			fmt.Printf("  Would generate %s.rb\n", token)
-			generated++
-			continue
-		}
-
-		caskPath := filepath.Join(caskDir, token+".rb")
+		caskPath := filepath.Join(caskDir, r.job.token+".rb")
 		f, err := os.Create(caskPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  ERROR writing %s: %v\n", caskPath, err)
@@ -153,18 +220,10 @@ func main() {
 			continue
 		}
 		f.Close()
-
-		fmt.Printf("  Generated %s\n", caskPath)
 		generated++
 	}
 
-	if generated == 0 {
-		fmt.Println("All casks are up to date.")
-	} else if dryRun {
-		fmt.Printf("\nDry run: %d cask(s) would be generated.\n", generated)
-	} else {
-		fmt.Printf("\nGenerated %d new cask(s).\n", generated)
-	}
+	fmt.Printf("\nGenerated %d new cask(s).\n", generated)
 }
 
 func downloadVersion(r Release) string {
