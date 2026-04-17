@@ -1,26 +1,19 @@
 # homebrew-mendix
 
-Homebrew tap and Scoop bucket for installing [Mendix Studio Pro](https://www.mendix.com/) versions side-by-side.
+Homebrew tap for installing [Mendix Studio Pro](https://www.mendix.com/) versions side-by-side on macOS.
 
-## macOS (Homebrew)
+## Install
 
 ```bash
 brew tap densmoe/mendix
 brew install --cask mendix-studio-pro@11.9.1
 ```
 
-Each version installs as a separate app, so you can have multiple versions installed simultaneously.
-
-## Windows (Scoop)
-
-```powershell
-scoop bucket add mendix https://github.com/densmoe/homebrew-mendix
-scoop install mendix-studio-pro-11.9.1
-```
+Each version installs as a separate app (e.g., `Mendix Studio Pro 11.9.1 Beta.app`), so you can have multiple versions installed simultaneously.
 
 ## Available versions
 
-Check the [`Casks/`](Casks/) directory for available Homebrew casks and [`bucket/`](bucket/) for Scoop manifests.
+Check the [`Casks/`](Casks/) directory for available versions.
 
 ## Adding a new version
 
@@ -28,7 +21,7 @@ Check the [`Casks/`](Casks/) directory for available Homebrew casks and [`bucket
 ./scripts/generate.sh 11.9.1
 ```
 
-This downloads the installer, computes the SHA256 hash, and generates both a Homebrew cask and a Scoop manifest.
+This downloads the installer, computes the SHA256 hash, and generates a Homebrew cask.
 
 ### Version format
 
@@ -40,9 +33,6 @@ Mx10 download URLs require the build number. You can find it in the Studio Pro "
 ## How it works
 
 Installers are downloaded directly from Mendix's public artifact server (`artifacts.rnd.mendix.com`). No authentication required.
-
-- **macOS**: `.pkg` installer via Homebrew Cask
-- **Windows**: `.exe` installer via Scoop
 
 ## Notes
 

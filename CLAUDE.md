@@ -1,18 +1,17 @@
 # homebrew-mendix
 
-Homebrew tap and Scoop bucket for installing Mendix Studio Pro versions side-by-side on macOS and Windows.
+Homebrew tap for installing Mendix Studio Pro versions side-by-side on macOS.
 
 ## Project structure
 
 ```
 Casks/                          Homebrew cask files (one per version)
-bucket/                         Scoop manifests (one per version)
-scripts/generate.sh             Generate cask + manifest from a version number
+scripts/generate.sh             Generate a cask from a version number
 ```
 
 ## Key commands
 
-### Generate a cask + Scoop manifest
+### Generate a cask
 
 ```bash
 ./scripts/generate.sh 11.9.1              # downloads installer, computes SHA256
@@ -41,7 +40,7 @@ brew uninstall --cask mendix-studio-pro@11.9.1
 - **Mx11+**: clean semver — `11.9.1`
 - **Mx10 and below**: includes build number — `10.24.13.86719`
 
-Download URLs: `https://artifacts.rnd.mendix.com/modelers/Mendix-{VERSION}-Mac-Setup.pkg` (Mac) / `...-Setup.exe` (Windows). No auth required.
+Download URL: `https://artifacts.rnd.mendix.com/modelers/Mendix-{VERSION}-Mac-Setup.pkg`. No auth required.
 
 ## App naming (Mac)
 
@@ -54,7 +53,6 @@ The "Beta" suffix exists because Studio Pro for Mac is still in beta. Casks and 
 
 - **One cask per version** (`mendix-studio-pro@11.9.1`) for true side-by-side installs — standard casks replace on upgrade.
 - **Homebrew Cask** (not Formula) because Studio Pro is a GUI app distributed as .pkg.
-- **Scoop** (not Chocolatey) for simpler JSON manifests and no review process.
 - **Generate script** to avoid manual copy-paste errors across versions.
 
 ## Git workflow
