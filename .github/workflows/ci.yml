@@ -29,4 +29,6 @@ jobs:
           done
 
       - name: brew style
-        run: brew style --cask Casks/
+        run: |
+          tap_path="$(brew --repository)/Library/Taps/${{ github.repository }}"
+          brew style --cask "$tap_path/Casks/"

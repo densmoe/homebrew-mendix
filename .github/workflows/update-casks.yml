@@ -38,7 +38,8 @@ jobs:
             name="$(basename "$cask" .rb)"
             brew audit --cask --strict "densmoe/mendix/$name"
           done
-          brew style --cask Casks/
+          tap_path="$(brew --repository)/Library/Taps/${{ github.repository }}"
+          brew style --cask "$tap_path/Casks/"
 
       - name: Check for changes
         id: changes
