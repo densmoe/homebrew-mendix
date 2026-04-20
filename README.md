@@ -39,8 +39,6 @@ A daily [GitHub Actions workflow](.github/workflows/update-casks.yml) checks the
 
 ## How it works
 
-Installers are downloaded directly from Mendix's public artifact server (`artifacts.rnd.mendix.com`). No authentication required.
-
 A [Go CLI](tools/cask-generator/) queries the Mendix Marketplace API for all available versions, checks which casks already exist, and generates new ones with verified SHA256 hashes. It also generates alias casks (`@latest`, `@11`, `@10.24`, etc.) that always point to the latest matching version.
 
 ## Notes
