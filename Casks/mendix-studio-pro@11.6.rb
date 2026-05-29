@@ -7,6 +7,8 @@ cask "mendix-studio-pro@11.6" do
   desc "Low-code application development platform"
   homepage "https://www.mendix.com/"
 
+  depends_on :macos
+
   pkg "Mendix-#{version}-Mac-Setup.pkg"
 
   uninstall delete: "/Applications/Mendix Studio Pro 11.6.6 Beta.app"

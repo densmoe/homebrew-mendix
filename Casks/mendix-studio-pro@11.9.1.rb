@@ -7,6 +7,8 @@ cask "mendix-studio-pro@11.9.1" do
   desc "Low-code application development platform"
   homepage "https://www.mendix.com/"
 
+  depends_on :macos
+
   pkg "Mendix-#{version}-Mac-Setup.pkg"
 
   # TODO: Update app name when Studio Pro for Mac exits beta

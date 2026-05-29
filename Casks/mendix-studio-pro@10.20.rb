@@ -7,6 +7,8 @@ cask "mendix-studio-pro@10.20" do
   desc "Low-code application development platform"
   homepage "https://www.mendix.com/"
 
+  depends_on :macos
+
   pkg "Mendix-#{version}-Mac-Setup.pkg"
 
   uninstall delete: "/Applications/Studio Pro 10.20.0.60519-Beta.app"
