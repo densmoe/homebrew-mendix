@@ -1,6 +1,6 @@
 cask "mendix-studio-pro@11.12" do
-  version "11.12.0"
-  sha256 "66aa6b34d0a912dba8be2f00ed1dea73fcf8533c600b9785a7055362d35f7d8f"
+  version "11.12.1"
+  sha256 "4e18864a983f5bec7baa5bb182507d50e581a6c519612ae7cad0ad76d8c713ce"
 
   url "https://artifacts.rnd.mendix.com/modelers/Mendix-#{version}-Mac-Setup.pkg"
   name "Mendix Studio Pro"
@@ -11,5 +11,5 @@ cask "mendix-studio-pro@11.12" do
 
   pkg "Mendix-#{version}-Mac-Setup.pkg"
 
-  uninstall delete: "/Applications/Mendix Studio Pro 11.12.0 Beta.app"
+  uninstall delete: "/Applications/Mendix Studio Pro 11.12.1 Beta.app"
 end
