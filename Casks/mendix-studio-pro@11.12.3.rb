@@ -1,4 +1,4 @@
-cask "mendix-studio-pro@11.12" do
+cask "mendix-studio-pro@11.12.3" do
   version "11.12.3"
   sha256 "da1168a6b7ffa5443a689ab828b67ab9f015569cd868819c701d6c5d3c61b133"
 
